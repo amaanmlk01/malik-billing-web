@@ -18,7 +18,6 @@ import os
 import sqlite3
 import qrcode
 
-
 app = Flask(__name__)
 app.secret_key = "malik_secret_123"
 
@@ -26,6 +25,7 @@ app.secret_key = "malik_secret_123"
 # PATHS / CONFIG
 # -----------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
 
 BUSINESS_NAME = "MASOOM FOOT STYLE"
 PARENT_COMPANY_NAME = "Bharti Airtel Limited"
@@ -40,8 +40,6 @@ BANK_IFSC = "JAKA0ACHBAL"
 BANK_ACCOUNT_NO = "0221010100000480"
 BANK_NAME = "Jammu and Kashmir Bank, ACHABAL SOPORE"
 UPI_ID = "emonmalik224-5@oksbi"
-
-DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
 
 INVOICE_FOLDER = os.path.join(DATA_DIR, "invoices")
 INVOICE_COUNTER_FILE = os.path.join(DATA_DIR, "invoice_counter.txt")
@@ -152,7 +150,30 @@ def number_to_words(n):
     return result.strip()
 
 
+def generate_upi_qr_image(upi_id, amount=None, note="Invoice Payment"):
+    payload = f"upi://pay?pa={upi_id}&pn={BANK_ACCOUNT_NAME}"
+    amt = safe_float(amount)
+    if amt > 0:
+        payload += f"&am={amt:.2f}"
+    if note:
+        payload += f"&tn={note.replace(' ', '%20')}"
+
+    qr = qrcode.QRCode(version=1, box_size=6, border=2)
+    qr.add_data(payload)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    return ImageReader(img)
+
+
+def ensure_storage():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(INVOICE_FOLDER, exist_ok=True)
+
+
 def init_db():
+    ensure_storage()
+
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
@@ -190,6 +211,8 @@ def init_db():
 
 
 def get_next_invoice_number():
+    ensure_storage()
+
     if not os.path.exists(INVOICE_COUNTER_FILE):
         with open(INVOICE_COUNTER_FILE, "w", encoding="utf-8") as f:
             f.write("1000")
@@ -205,28 +228,17 @@ def get_next_invoice_number():
     return current
 
 
-def generate_upi_qr_image(upi_id, amount=None, note="Invoice Payment"):
-    payload = f"upi://pay?pa={upi_id}&pn={BANK_ACCOUNT_NAME}"
-    amt = safe_float(amount)
-    if amt > 0:
-        payload += f"&am={amt:.2f}"
-    if note:
-        payload += f"&tn={note.replace(' ', '%20')}"
+def require_login():
+    return "user" in session
 
-    qr = qrcode.QRCode(version=1, box_size=6, border=2)
-    qr.add_data(payload)
-    qr.make(fit=True)
 
-    img = qr.make_image(fill_color="black", back_color="white")
-    return ImageReader(img)
+# Run DB init on import so Railway/Gunicorn also creates tables
+init_db()
 
 
 # -----------------------------
 # AUTH ROUTES
 # -----------------------------
-
-init_db()
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -253,9 +265,10 @@ def login():
     <html>
     <head>
         <title>Login - Malik Billing</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
     </head>
     <body style="font-family:Arial;background:#0b1220;color:white;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;">
-        <div style="background:#111827;padding:30px;border-radius:12px;width:320px;">
+        <div style="background:#111827;padding:30px;border-radius:12px;width:320px;box-sizing:border-box;">
             <h2 style="margin-top:0;">Malik Billing Login</h2>
             <form method="POST">
                 <input name="username" placeholder="Username" style="width:100%;padding:10px;margin-bottom:12px;border:none;border-radius:8px;box-sizing:border-box;">
@@ -273,74 +286,81 @@ def logout():
     session.pop("user", None)
     return redirect(url_for("login"))
 
+init_db()
 
 # -----------------------------
 # APP ROUTES
 # -----------------------------
 @app.route("/")
 def home():
-    if "user" not in session:
+    if not require_login():
         return redirect(url_for("login"))
     return render_template("index.html")
 
 
 @app.route("/history")
 def history():
-    if "user" not in session:
+    if not require_login():
         return redirect(url_for("login"))
 
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
 
-    cursor.execute(
-        """
-        SELECT invoice_no, invoice_date, bill_to, subtotal, received, balance, pdf_file
-        FROM invoices
-        ORDER BY id DESC
-        """
-    )
+        cursor.execute(
+            """
+            SELECT invoice_no, invoice_date, bill_to, subtotal, received, balance, pdf_file
+            FROM invoices
+            ORDER BY id DESC
+            """
+        )
 
-    invoices = cursor.fetchall()
-    conn.close()
+        invoices = cursor.fetchall()
+        conn.close()
 
-    return render_template("history.html", invoices=invoices)
+        return render_template("history.html", invoices=invoices)
+    except Exception as e:
+        return f"History error: {str(e)}"
 
 
 @app.route("/invoice/<filename>")
 def open_invoice_file(filename):
-    if "user" not in session:
+    if not require_login():
         return redirect(url_for("login"))
     return send_from_directory(INVOICE_FOLDER, filename, as_attachment=False)
 
 
 @app.route("/customers")
 def get_customers():
-    if "user" not in session:
+    if not require_login():
         return jsonify({"customers": []})
 
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
 
-    cursor.execute("SELECT bill_to, ship_to, gstin FROM customers ORDER BY bill_to ASC")
-    rows = cursor.fetchall()
-    conn.close()
+        cursor.execute("SELECT bill_to, ship_to, gstin FROM customers ORDER BY bill_to ASC")
+        rows = cursor.fetchall()
+        conn.close()
 
-    customers = []
-    for row in rows:
-        customers.append(
-            {
-                "bill_to": row[0],
-                "ship_to": row[1],
-                "gstin": row[2],
-            }
-        )
+        customers = []
+        for row in rows:
+            customers.append(
+                {
+                    "bill_to": row[0],
+                    "ship_to": row[1],
+                    "gstin": row[2],
+                }
+            )
 
-    return jsonify({"customers": customers})
+        return jsonify({"customers": customers})
+    except Exception:
+        return jsonify({"customers": []})
 
 
 @app.route("/generate", methods=["POST"])
 def generate_invoice():
-    if "user" not in session:
+    if not require_login():
         return redirect(url_for("login"))
 
     data = request.json or {}
@@ -353,8 +373,7 @@ def generate_invoice():
     received = data.get("received", "0") or "0"
     balance = data.get("balance", "0") or "0"
 
-    if not os.path.exists(INVOICE_FOLDER):
-        os.makedirs(INVOICE_FOLDER)
+    ensure_storage()
 
     invoice_no = get_next_invoice_number()
     invoice_date = datetime.now()
@@ -363,9 +382,6 @@ def generate_invoice():
     filename = f"invoice_{invoice_no}.pdf"
     filepath = os.path.join(INVOICE_FOLDER, filename)
 
-    # -----------------------------
-    # PDF LAYOUT
-    # -----------------------------
     c = canvas.Canvas(filepath, pagesize=A4)
     width, height = A4
 
@@ -374,10 +390,11 @@ def generate_invoice():
     top = height - 28
     usable_w = width - ml - mr
 
-    # Header
+    # -----------------------------
+    # HEADER
+    # -----------------------------
     y = top
 
-    # Left label
     c.setFillColor(DARK_GREY)
     c.setFont("Helvetica-Bold", 9)
     c.drawString(ml, y, "BILL OF SUPPLY")
@@ -392,14 +409,12 @@ def generate_invoice():
     c.setFont("Helvetica-Bold", 7.5)
     c.drawCentredString(box_x + box_w / 2, box_y + 4, "ORIGINAL")
 
-    # Right company
     c.setFillColor(MID_GREY)
     c.setFont("Helvetica", 9)
     c.drawRightString(width - mr, y, PARENT_COMPANY_NAME)
 
     header_y = y - 28
 
-    # Logo
     if os.path.exists(LOGO_IMAGE_PATH):
         try:
             logo = ImageReader(LOGO_IMAGE_PATH)
@@ -415,7 +430,6 @@ def generate_invoice():
         except Exception:
             pass
 
-    # Center branding
     center_x = width / 2
     c.setFillColor(CRIMSON)
     c.setFont("Times-Bold", 20)
@@ -431,12 +445,13 @@ def generate_invoice():
     )
     c.drawCentredString(center_x, header_y - 45, f"Email:  {BUSINESS_EMAIL}")
 
-    # Thick red divider
     divider_y = header_y - 64
     c.setFillColor(CRIMSON)
     c.rect(ml, divider_y, usable_w, 5, fill=1, stroke=0)
 
-    # Metadata bar
+    # -----------------------------
+    # METADATA BAR
+    # -----------------------------
     meta_y = divider_y - 30
     meta_h = 28
     c.setFillColor(LIGHT_GREY)
@@ -457,7 +472,9 @@ def generate_invoice():
     c.drawString(col2 + 62, meta_y + 17, invoice_date.strftime("%d/%m/%Y"))
     c.drawString(col3 + 48, meta_y + 17, due_date.strftime("%d/%m/%Y"))
 
-    # Address section
+    # -----------------------------
+    # ADDRESS SECTION
+    # -----------------------------
     addr_top = meta_y - 22
     left_col_x = ml
     right_col_x = width / 2 + 10
@@ -491,7 +508,9 @@ def generate_invoice():
     c.setFont("Helvetica", 9)
     c.drawString(left_col_x, min(bill_y, ship_y) - 6, f"GSTIN:  {gstin if gstin else '-'}")
 
-    # Itemized table
+    # -----------------------------
+    # ITEM TABLE
+    # -----------------------------
     table_top = min(bill_y, ship_y) - 34
     table_left = ml
     table_right = width - mr
@@ -544,7 +563,6 @@ def generate_invoice():
         c.line(table_left, y_row - 10, table_right, y_row - 10)
         y_row -= row_h
 
-    # Subtotal band
     subtotal_y = y_row - 2
     c.setStrokeColor(CRIMSON)
     c.line(table_left, subtotal_y + 10, table_right, subtotal_y + 10)
@@ -558,11 +576,12 @@ def generate_invoice():
     c.setStrokeColor(CRIMSON)
     c.line(table_left, subtotal_y - 8, table_right, subtotal_y - 8)
 
-    # Lower section
+    # -----------------------------
+    # LOWER SECTION
+    # -----------------------------
     lower_top = subtotal_y - 30
     lower_bottom_target = 88
 
-    # Left block
     left_block_x = table_left
     current_y = lower_top
 
@@ -625,7 +644,6 @@ def generate_invoice():
     c.drawString(left_block_x, terms_y - 16, "1. Goods once sold will not be taken back or exchanged")
     c.drawString(left_block_x, terms_y - 29, "2. All disputes are subject to local jurisdiction only")
 
-    # Right totals
     totals_x = width - mr - 220
     totals_right = width - mr
     totals_top = lower_top + 2
@@ -682,7 +700,6 @@ def generate_invoice():
     if line:
         c.drawString(totals_x, line_y, line)
 
-    # Signature
     sig_y = lower_bottom_target + 18
     if os.path.exists(SIGNATURE_IMAGE_PATH):
         try:
@@ -705,7 +722,9 @@ def generate_invoice():
 
     c.save()
 
-    # Save database record
+    # -----------------------------
+    # SAVE DATABASE
+    # -----------------------------
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
@@ -766,5 +785,4 @@ def generate_invoice():
 
 
 if __name__ == "__main__":
-    init_db()
     app.run(host="0.0.0.0", port=5000, debug=True)
