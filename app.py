@@ -224,6 +224,9 @@ def generate_upi_qr_image(upi_id, amount=None, note="Invoice Payment"):
 # -----------------------------
 # AUTH ROUTES
 # -----------------------------
+
+init_db()
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
