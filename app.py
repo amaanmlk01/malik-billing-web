@@ -41,9 +41,11 @@ BANK_ACCOUNT_NO = "0221010100000480"
 BANK_NAME = "Jammu and Kashmir Bank, ACHABAL SOPORE"
 UPI_ID = "emonmalik224-5@oksbi"
 
-INVOICE_FOLDER = os.path.join(BASE_DIR, "invoices")
-INVOICE_COUNTER_FILE = os.path.join(BASE_DIR, "invoice_counter.txt")
-DB_FILE = os.path.join(BASE_DIR, "billing.db")
+DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
+
+INVOICE_FOLDER = os.path.join(DATA_DIR, "invoices")
+INVOICE_COUNTER_FILE = os.path.join(DATA_DIR, "invoice_counter.txt")
+DB_FILE = os.path.join(DATA_DIR, "billing.db")
 
 LOGO_IMAGE_PATH = os.path.join(BASE_DIR, "static", "images", "logo.png")
 SIGNATURE_IMAGE_PATH = os.path.join(BASE_DIR, "static", "images", "signature.png")
