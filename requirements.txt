@@ -1,0 +1,4 @@
+Flask
+reportlab
+qrcode[pil]
+gunicorn

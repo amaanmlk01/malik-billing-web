@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Malik Billing Web</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#d32f2f">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/icon-192.png') }}">
+</head>
+<body>
+
+<div style="max-width:900px; margin:auto; padding:15px;">
+
+    <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <h1 style="margin:0;">Malik Billing</h1>
+    <a href="/logout" style="background:#d32f2f; color:white; text-decoration:none; padding:10px 14px; border-radius:8px;">Logout</a>
+</div>
+
+<div class="history-topbar">
+    <a href="/history" class="back-btn">View Invoice History</a>
+</div>
+
+    <div class="section">
+        <h2>Customer Details</h2>
+	<label for="customerSelect">Select Saved Customer</label>
+	<select id="customerSelect">
+    		<option value="">-- Select Customer --</option>
+	</select>
+
+        <input type="text" id="billTo" placeholder="Bill To">
+        <input type="text" id="shipTo" placeholder="Ship To / Address">
+        <input type="text" id="gstin" placeholder="GSTIN">
+    </div>
+
+    <div class="section">
+        <h2>Items</h2>
+
+        <div class="item-header">
+            <span>Item</span>
+            <span>Qty</span>
+            <span>Rate</span>
+            <span>Amount</span>
+        </div>
+
+        <div id="items">
+            <div class="item-row">
+                <input type="text" class="item-name" placeholder="Item">
+                <input type="number" class="item-qty" placeholder="Qty" min="0">
+                <input type="number" class="item-rate" placeholder="Rate" min="0">
+                <input type="text" class="item-amount" placeholder="Amount" readonly>
+            </div>
+        </div>
+
+        <button type="button" onclick="addItem()">Add Item</button>
+    </div>
+
+    <div class="section totals-box">
+        <h2>Totals</h2>
+
+        <label>Subtotal</label>
+        <input type="text" id="subtotal" readonly>
+
+        <label>Received Amount</label>
+        <input type="number" id="receivedAmount" placeholder="Received Amount" min="0">
+
+        <label>Balance Due</label>
+        <input type="text" id="balanceDue" readonly>
+    </div>
+
+    <button class="generate-btn" type="button">Generate Invoice</button>
+
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+
+<script>
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+        navigator.serviceWorker.register("/static/sw.js")
+            .then(function (registration) {
+                console.log("Service Worker registered:", registration.scope);
+            })
+            .catch(function (error) {
+                console.log("Service Worker registration failed:", error);
+            });
+    });
+}
+</script>
+
+</body>
+</html>

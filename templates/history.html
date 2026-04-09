@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice History</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="container">
+    <h1>Invoice History</h1>
+
+    <div class="history-topbar">
+        <a href="/" class="back-btn">← Back to Billing</a>
+    </div>
+
+    <div class="history-table-wrap">
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Invoice No</th>
+                    <th>Date</th>
+                    <th>Customer</th>
+                    <th>Subtotal</th>
+                    <th>Received</th>
+                    <th>Balance</th>
+                    <th>PDF File</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in invoices %}
+                <tr>
+                    <td>{{ invoice[0] }}</td>
+                    <td>{{ invoice[1] }}</td>
+                    <td>{{ invoice[2] }}</td>
+                    <td>{{ invoice[3] }}</td>
+                    <td>{{ invoice[4] }}</td>
+                    <td>{{ invoice[5] }}</td>
+                    <td>
+    <a href="/invoice/{{ invoice[6] }}" target="_blank" class="pdf-link">
+        {{ invoice[6] }}
+    </a>
+</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+</body>
+</html>
